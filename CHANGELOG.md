@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade to fluent-bit 2.2.1
+
+## 0.1.0
+
+### Changed
+
 - Create custom docker file to add missing aws plugins and auditd.
 
 [Unreleased]: https://github.com/giantswarm/prometheus-meta-operator/compare/v4.44.0...HEAD

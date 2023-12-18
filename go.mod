@@ -1,3 +1,3 @@
 module github.com/giantswarm/fluent-bit
 
-go 1.18
+go 1.21
