@@ -970,6 +970,15 @@ int flb_input_instance_init(struct flb_input_instance *ins,
                            1, (char *[]) {"name"});
     cmt_counter_set(ins->cmt_records, ts, 0, 1, (char *[]) {name});
 
+    /* fluentbit_input_ingestion_paused */
+    ins->cmt_ingestion_paused = \
+            cmt_gauge_create(ins->cmt,
+                             "fluentbit", "input",
+                             "ingestion_paused",
+                             "Is the input paused or not?",
+                             1, (char *[]) {"name"});
+    cmt_gauge_set(ins->cmt_ingestion_paused, ts, 0, 1, (char *[]) {name});
+
     /* Storage Metrics */
     if (ctx->storage_metrics == FLB_TRUE) {
         /* fluentbit_input_storage_overlimit */
@@ -1528,7 +1537,6 @@ static int collector_start(struct flb_input_collector *coll,
 int flb_input_collector_start(int coll_id, struct flb_input_instance *in)
 {
     int ret;
-    int c = 0;
     struct mk_list *head;
     struct flb_input_collector *coll;
 
@@ -1542,7 +1550,6 @@ int flb_input_collector_start(int coll_id, struct flb_input_instance *in)
             }
             return ret;
         }
-        c++;
     }
 
     return -1;
@@ -1672,6 +1679,24 @@ int flb_input_test_pause_resume(struct flb_input_instance *ins, int sleep_second
     return 0;
 }
 
+static void flb_input_ingestion_paused(struct flb_input_instance *ins)
+{
+    if (ins->cmt_ingestion_paused != NULL) {
+        /* cmetrics */
+        cmt_gauge_set(ins->cmt_ingestion_paused, cfl_time_now(), 1,
+                      1, (char *[]) {flb_input_name(ins)});
+    }
+}
+
+static void flb_input_ingestion_resumed(struct flb_input_instance *ins)
+{
+    if (ins->cmt_ingestion_paused != NULL) {
+        /* cmetrics */
+        cmt_gauge_set(ins->cmt_ingestion_paused, cfl_time_now(), 0,
+                      1, (char *[]) {flb_input_name(ins)});
+    }
+}
+
 int flb_input_pause(struct flb_input_instance *ins)
 {
     /* if the instance is already paused, just return */
@@ -1691,14 +1716,24 @@ int flb_input_pause(struct flb_input_instance *ins)
         }
     }
 
+    flb_input_ingestion_paused(ins);
+
     return 0;
 }
 
 int flb_input_resume(struct flb_input_instance *ins)
 {
     if (ins->p->cb_resume) {
-        ins->p->cb_resume(ins->context, ins->config);
+        if (flb_input_is_threaded(ins)) {
+            /* signal the thread event loop about the 'resume' operation */
+            flb_input_thread_instance_resume(ins);
+        }
+        else {
+            ins->p->cb_resume(ins->context, ins->config);
+        }
     }
+
+    flb_input_ingestion_resumed(ins);
 
     return 0;
 }

@@ -60,8 +60,6 @@ if(FLB_WINDOWS_DEFAULTS)
   set(FLB_IN_EMITTER            Yes)
   set(FLB_IN_PODMAN_METRICS      No)
   set(FLB_IN_ELASTICSEARCH      Yes)
-  # disable calyptia fleet management for now
-  set(FLB_IN_CALYPTIA_FLEET     No)
   set(FLB_IN_SPLUNK             Yes)
 
   # OUTPUT plugins
@@ -71,6 +69,7 @@ if(FLB_WINDOWS_DEFAULTS)
   set(FLB_OUT_AZURE_KUSTO       Yes)
   set(FLB_OUT_BIGQUERY           No)
   set(FLB_OUT_COUNTER           Yes)
+  set(FLB_OUT_CHRONICLE         Yes)
   set(FLB_OUT_DATADOG           Yes)
   set(FLB_OUT_ES                Yes)
   set(FLB_OUT_EXIT               No)
