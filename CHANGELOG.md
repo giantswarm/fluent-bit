@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2023-12-18
+
 ### Changed
 
 - Upgrade to fluent-bit 2.2.1
@@ -17,4 +19,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Create custom docker file to add missing aws plugins and auditd.
 
-[Unreleased]: https://github.com/giantswarm/prometheus-meta-operator/compare/v4.44.0...HEAD
+[Unreleased]: https://github.com/giantswarm/fluent-bit/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/giantswarm/fluent-bit/compare/v4.44.0...v0.2.0
