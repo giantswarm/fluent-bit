@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Documentation on how to upgrade fluent-bit.
+
+### Changed
+
+- This PR breaks the existing setup relying on an upstream fork to use only a Dockerfile entry and architect to build the image.
+
+### Removed
+
+- Removes the useless upstream code.
+
 ## [0.2.0] - 2023-12-18
 
 ### Changed
