@@ -6,4 +6,4 @@ This mostly rely on the upstream dockerfile with a few changes annotated with `G
 
 ## Upgrade
 
-To upgrade the fluent-bit version, you should go to `./Dockerfile`, bump the value of `ARG RELEASE_VERSION=3.0.6` to the wanted fluent-bit version and create a `Release PR` to trigger the circle CI workflow.
+To upgrade the fluent-bit version, you should go to `./Dockerfile`, bump the value of `ARG RELEASE_VERSION=3.1.6` to the wanted fluent-bit version and create a `Release PR` to trigger the circle CI workflow.
