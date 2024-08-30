@@ -1,4 +1,3 @@
-
 # To use this container you may need to do the following:
 # https://askubuntu.com/a/1369504
 # sudo add-apt-repository ppa:jacob/virtualisation #(for Ubuntu 20.04)
@@ -17,7 +16,7 @@ ARG RELEASE_VERSION=3.1.6
 FROM multiarch/qemu-user-static:x86_64-arm as qemu-arm32
 FROM multiarch/qemu-user-static:x86_64-aarch64 as qemu-arm64
 
-FROM debian:bullseye-slim as builder-base
+FROM debian:bookworm-slim as builder-base
 
 COPY --from=qemu-arm32 /usr/bin/qemu-arm-static /usr/bin/
 COPY --from=qemu-arm64 /usr/bin/qemu-aarch64-static /usr/bin/
@@ -33,7 +32,7 @@ RUN mkdir -p /fluent-bit/bin /fluent-bit/etc /fluent-bit/log
 ENV DEBIAN_FRONTEND noninteractive
 
 # hadolint ignore=DL3008
-RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/sources.list && \
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
@@ -46,7 +45,7 @@ RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/
     libssl-dev \
     libsasl2-dev \
     pkg-config \
-    libsystemd-dev/bullseye-backports \
+    libsystemd-dev/bookworm-backports \
     zlib1g-dev \
     libpq-dev \
     postgresql-server-dev-all \
@@ -57,12 +56,8 @@ RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/
     && rm -rf /var/lib/apt/lists/*
 
 # Must be run from root of repo
-WORKDIR /src/fluent-bit
-
-# Giant Swarm Custom: Clone the upstream repo
-ARG RELEASE_VERSION
-RUN git config --global http.version HTTP/1.1
-RUN git clone https://github.com/fluent/fluent-bit.git --branch v"${RELEASE_VERSION}" --single-branch /src/fluent-bit
+WORKDIR /src/fluent-bit/
+COPY . ./
 
 # We split the builder setup out so people can target it or use as a base image without doing a full build.
 FROM builder-base as builder
@@ -73,8 +68,7 @@ RUN cmake -DFLB_RELEASE=On \
     -DFLB_SHARED_LIB=Off \
     -DFLB_EXAMPLES=Off \
     -DFLB_HTTP_SERVER=On \
-    # Giant Swarm Custom: Enabled so we can use the exec plugin
-    -DFLB_IN_EXEC=On \
+    -DFLB_IN_EXEC=Off \
     -DFLB_IN_SYSTEMD=On \
     -DFLB_OUT_KAFKA=On \
     -DFLB_OUT_PGSQL=On \
@@ -86,22 +80,23 @@ RUN cmake -DFLB_RELEASE=On \
 RUN make -j "$(getconf _NPROCESSORS_ONLN)"
 RUN install bin/fluent-bit /fluent-bit/bin/
 
-# Giant Swarm Custom: Replace Docker COPY with cp as we use git clone
-RUN cp /src/fluent-bit/conf/fluent-bit.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_ambassador.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_java.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_extra.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_openstack.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_cinder.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/plugins.conf /fluent-bit/etc/
+# Configuration files
+COPY conf/fluent-bit.conf \
+    conf/parsers.conf \
+    conf/parsers_ambassador.conf \
+    conf/parsers_java.conf \
+    conf/parsers_extra.conf \
+    conf/parsers_openstack.conf \
+    conf/parsers_cinder.conf \
+    conf/plugins.conf \
+    /fluent-bit/etc/
 
 # Generate schema and include as part of the container image
 RUN /fluent-bit/bin/fluent-bit -J > /fluent-bit/etc/schema.json
 
 # Simple example of how to properly extract packages for reuse in distroless
 # Taken from: https://github.com/GoogleContainerTools/distroless/issues/863
-FROM debian:bullseye-slim as deb-extractor
+FROM debian:bookworm-slim as deb-extractor
 COPY --from=qemu-arm32 /usr/bin/qemu-arm-static /usr/bin/
 COPY --from=qemu-arm64 /usr/bin/qemu-aarch64-static /usr/bin/
 
@@ -109,14 +104,14 @@ COPY --from=qemu-arm64 /usr/bin/qemu-aarch64-static /usr/bin/
 # We also include some extra handling for the status files that some tooling uses for scanning, etc.
 WORKDIR /tmp
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/sources.list && \
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get download \
-    libssl1.1 \
+    libssl3 \
     libsasl2-2 \
     pkg-config \
     libpq5 \
-    libsystemd0/bullseye-backports \
+    libsystemd0/bookworm-backports \
     zlib1g \
     ca-certificates \
     libatomic1 \
@@ -124,7 +119,7 @@ RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/
     libzstd1 \
     liblz4-1 \
     libgssapi-krb5-2 \
-    libldap-2.4-2 \
+    libldap-2.5 \
     libgpg-error0 \
     libkrb5-3 \
     libk5crypto3 \
@@ -139,9 +134,11 @@ RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/
     libnettle8 \
     libhogweed6 \
     libgmp10 \
-    libffi7 \
+    libffi8 \
     liblzma5 \
-    libyaml-0-2 && \
+    libyaml-0-2 \
+    libcap2 \
+    && \
     mkdir -p /dpkg/var/lib/dpkg/status.d/ && \
     for deb in *.deb; do \
     package_name=$(dpkg-deb -I "${deb}" | awk '/^ Package: .*$/ {print $2}'); \
@@ -156,7 +153,7 @@ RUN find /dpkg/ -type d -empty -delete && \
 
 # We want latest at time of build
 # hadolint ignore=DL3006
-FROM gcr.io/distroless/cc-debian11 as production
+FROM gcr.io/distroless/cc-debian12 as production
 ARG RELEASE_VERSION
 ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}
 LABEL description="Fluent Bit multi-architecture container image" \
@@ -181,18 +178,13 @@ COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 # Finally the binaries as most likely to change
 COPY --from=builder /fluent-bit /fluent-bit
 
-## Giant Swarm Custom: Copy AWS plugins to support more features
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/kinesis.so /fluent-bit/kinesis.so
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/firehose.so /fluent-bit/firehose.so
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/cloudwatch.so /fluent-bit/cloudwatch.so
-
 EXPOSE 2020
 
 # Entry point
 ENTRYPOINT [ "/fluent-bit/bin/fluent-bit" ]
-CMD ["/fluent-bit/bin/fluent-bit", "-e", "/fluent-bit/firehose.so", "-e", "/fluent-bit/cloudwatch.so", "-e", "/fluent-bit/kinesis.so", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
 
-FROM debian:bullseye-slim as debug
+FROM debian:bookworm-slim as debug
 ARG RELEASE_VERSION
 ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}
 LABEL description="Fluent Bit multi-architecture debug container image" \
@@ -213,16 +205,14 @@ COPY --from=qemu-arm64 /usr/bin/qemu-aarch64-static /usr/bin/
 ENV DEBIAN_FRONTEND noninteractive
 
 # hadolint ignore=DL3008
-RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/sources.list && \
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    # Giant Swarm Custom: Added this plugin so we can support auditd logs
-    auditd  \
-    libssl1.1 \
+    libssl3 \
     libsasl2-2 \
     pkg-config \
     libpq5 \
-    libsystemd0/bullseye-backports \
+    libsystemd0/bookworm-backports \
     zlib1g \
     ca-certificates \
     libatomic1 \
@@ -236,20 +226,14 @@ RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/
     openssl \
     htop atop strace iotop sysstat ncdu logrotate hdparm pciutils psmisc tree pv \
     cmake make tar flex bison \
-    libssl-dev libsasl2-dev libsystemd-dev/bullseye-backports zlib1g-dev libpq-dev libyaml-dev postgresql-server-dev-all \
+    libssl-dev libsasl2-dev libsystemd-dev/bookworm-backports zlib1g-dev libpq-dev libyaml-dev postgresql-server-dev-all \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rm -f /usr/bin/qemu-*-static
 COPY --from=builder /fluent-bit /fluent-bit
 
-## Giant Swarm Custom: Copy AWS plugins to support more features
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/kinesis.so /fluent-bit/kinesis.so
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/firehose.so /fluent-bit/firehose.so
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/cloudwatch.so /fluent-bit/cloudwatch.so
-
 EXPOSE 2020
 
-# Entry point
-ENTRYPOINT [ "/fluent-bit/bin/fluent-bit" ]
-CMD ["/fluent-bit/bin/fluent-bit", "-e", "/fluent-bit/firehose.so", "-e", "/fluent-bit/cloudwatch.so", "-e", "/fluent-bit/kinesis.so", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+# No entry point so we can just shell in
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
