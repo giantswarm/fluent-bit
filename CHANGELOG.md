@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2024-09-02
+
 ### Changed
 
 - Upgrade default base image (debian bullseye to bookworm) and some dependencies based on upstream changes
@@ -43,7 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Create custom docker file to add missing aws plugins and auditd.
 
-[Unreleased]: https://github.com/giantswarm/fluent-bit/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/giantswarm/fluent-bit/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/giantswarm/fluent-bit/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/giantswarm/fluent-bit/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/giantswarm/fluent-bit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/giantswarm/fluent-bit/compare/v0.1.0...v0.2.0
