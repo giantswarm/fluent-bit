@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2024-10-14
+
 ### Changed
 
 - Bump fluent-bit from `3.1.6` to `3.1.9`.
@@ -49,7 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Create custom docker file to add missing aws plugins and auditd.
 
-[Unreleased]: https://github.com/giantswarm/fluent-bit/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/giantswarm/fluent-bit/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/giantswarm/fluent-bit/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/giantswarm/fluent-bit/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/giantswarm/fluent-bit/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/giantswarm/fluent-bit/compare/v0.2.0...v0.3.0
