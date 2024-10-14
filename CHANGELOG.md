@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bump fluent-bit from `3.1.6` to `3.1.9`.
+
 ## [0.4.1] - 2024-09-02
 
 ### Changed
