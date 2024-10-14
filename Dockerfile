@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+# check=skip=InvalidBaseImagePlatform
 
 # To use this container you may need to do the following:
 # https://askubuntu.com/a/1369504
@@ -11,13 +13,13 @@
 # docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7,linux/s390x" -f ./dockerfiles/Dockerfile.multiarch --build-arg FLB_TARBALL=https://github.com/fluent/fluent-bit/archive/v1.8.11.tar.gz ./dockerfiles/
 
 # Set this to the current release version: it gets done so as part of the release.
-ARG RELEASE_VERSION=3.1.6
+ARG RELEASE_VERSION=3.1.9
 
 # For multi-arch builds - assumption is running on an AMD64 host
-FROM multiarch/qemu-user-static:x86_64-arm as qemu-arm32
-FROM multiarch/qemu-user-static:x86_64-aarch64 as qemu-arm64
+FROM multiarch/qemu-user-static:x86_64-arm AS qemu-arm32
+FROM multiarch/qemu-user-static:x86_64-aarch64 AS qemu-arm64
 
-FROM debian:bookworm-slim as builder-base
+FROM debian:bookworm-slim AS builder-base
 
 COPY --from=qemu-arm32 /usr/bin/qemu-arm-static /usr/bin/
 COPY --from=qemu-arm64 /usr/bin/qemu-aarch64-static /usr/bin/
@@ -30,7 +32,7 @@ ENV FLB_CHUNK_TRACE=${FLB_CHUNK_TRACE}
 
 RUN mkdir -p /fluent-bit/bin /fluent-bit/etc /fluent-bit/log
 
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
 # hadolint ignore=DL3008
 RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/sources.list && \
@@ -58,14 +60,10 @@ RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/
 
 # Must be run from root of repo
 WORKDIR /src/fluent-bit/
-
-# Giant Swarm Custom: Clone the upstream repo
-ARG RELEASE_VERSION
-RUN git config --global http.version HTTP/1.1
-RUN git clone https://github.com/fluent/fluent-bit.git --branch v"${RELEASE_VERSION}" --single-branch /src/fluent-bit
+COPY . ./
 
 # We split the builder setup out so people can target it or use as a base image without doing a full build.
-FROM builder-base as builder
+FROM builder-base AS builder
 WORKDIR /src/fluent-bit/build/
 RUN cmake -DFLB_RELEASE=On \
     -DFLB_JEMALLOC=On \
@@ -73,8 +71,7 @@ RUN cmake -DFLB_RELEASE=On \
     -DFLB_SHARED_LIB=Off \
     -DFLB_EXAMPLES=Off \
     -DFLB_HTTP_SERVER=On \
-    # Giant Swarm Custom: Enabled so we can use the exec plugin
-    -DFLB_IN_EXEC=On \
+    -DFLB_IN_EXEC=Off \
     -DFLB_IN_SYSTEMD=On \
     -DFLB_OUT_KAFKA=On \
     -DFLB_OUT_PGSQL=On \
@@ -86,22 +83,23 @@ RUN cmake -DFLB_RELEASE=On \
 RUN make -j "$(getconf _NPROCESSORS_ONLN)"
 RUN install bin/fluent-bit /fluent-bit/bin/
 
-# Giant Swarm Custom: Replace Docker COPY with cp as we use git clone
-RUN cp /src/fluent-bit/conf/fluent-bit.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_ambassador.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_java.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_extra.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_openstack.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/parsers_cinder.conf /fluent-bit/etc/
-RUN cp /src/fluent-bit/conf/plugins.conf /fluent-bit/etc/
+# Configuration files
+COPY conf/fluent-bit.conf \
+    conf/parsers.conf \
+    conf/parsers_ambassador.conf \
+    conf/parsers_java.conf \
+    conf/parsers_extra.conf \
+    conf/parsers_openstack.conf \
+    conf/parsers_cinder.conf \
+    conf/plugins.conf \
+    /fluent-bit/etc/
 
 # Generate schema and include as part of the container image
 RUN /fluent-bit/bin/fluent-bit -J > /fluent-bit/etc/schema.json
 
 # Simple example of how to properly extract packages for reuse in distroless
 # Taken from: https://github.com/GoogleContainerTools/distroless/issues/863
-FROM debian:bookworm-slim as deb-extractor
+FROM debian:bookworm-slim AS deb-extractor
 COPY --from=qemu-arm32 /usr/bin/qemu-arm-static /usr/bin/
 COPY --from=qemu-arm64 /usr/bin/qemu-aarch64-static /usr/bin/
 
@@ -112,8 +110,6 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get download \
-    # Giant Swarm Custom: Added this plugin so we can support auditd logs
-    auditd \
     libssl3 \
     libsasl2-2 \
     pkg-config \
@@ -160,13 +156,13 @@ RUN find /dpkg/ -type d -empty -delete && \
 
 # We want latest at time of build
 # hadolint ignore=DL3006
-FROM gcr.io/distroless/cc-debian12 as production
+FROM gcr.io/distroless/cc-debian12 AS production
 ARG RELEASE_VERSION
 ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}
 LABEL description="Fluent Bit multi-architecture container image" \
     vendor="Fluent Organization" \
     version="${RELEASE_VERSION}" \
-    author="Eduardo Silva <eduardo@calyptia.com>" \
+    author="Eduardo Silva <eduardo.silva@chronosphere.io>" \
     org.opencontainers.image.description="Fluent Bit container image" \
     org.opencontainers.image.title="Fluent Bit" \
     org.opencontainers.image.licenses="Apache-2.0" \
@@ -174,7 +170,7 @@ LABEL description="Fluent Bit multi-architecture container image" \
     org.opencontainers.image.version="${RELEASE_VERSION}" \
     org.opencontainers.image.source="https://github.com/fluent/fluent-bit" \
     org.opencontainers.image.documentation="https://docs.fluentbit.io/" \
-    org.opencontainers.image.authors="Eduardo Silva <eduardo@calyptia.com>"
+    org.opencontainers.image.authors="Eduardo Silva <eduardo.silva@chronosphere.io>"
 
 # Copy the libraries from the extractor stage into root
 COPY --from=deb-extractor /dpkg /
@@ -185,24 +181,19 @@ COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 # Finally the binaries as most likely to change
 COPY --from=builder /fluent-bit /fluent-bit
 
-## Giant Swarm Custom: Copy AWS plugins to support more features
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/kinesis.so /fluent-bit/kinesis.so
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/firehose.so /fluent-bit/firehose.so
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/cloudwatch.so /fluent-bit/cloudwatch.so
-
 EXPOSE 2020
 
 # Entry point
 ENTRYPOINT [ "/fluent-bit/bin/fluent-bit" ]
-CMD ["/fluent-bit/bin/fluent-bit", "-e", "/fluent-bit/firehose.so", "-e", "/fluent-bit/cloudwatch.so", "-e", "/fluent-bit/kinesis.so", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
 
-FROM debian:bookworm-slim as debug
+FROM debian:bookworm-slim AS debug
 ARG RELEASE_VERSION
 ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}
 LABEL description="Fluent Bit multi-architecture debug container image" \
     vendor="Fluent Organization" \
     version="${RELEASE_VERSION}-debug" \
-    author="Eduardo Silva <eduardo@calyptia.com>" \
+    author="Eduardo Silva <eduardo.silva@chronosphere.io>" \
     org.opencontainers.image.description="Fluent Bit debug container image" \
     org.opencontainers.image.title="Fluent Bit Debug" \
     org.opencontainers.image.licenses="Apache-2.0" \
@@ -210,11 +201,11 @@ LABEL description="Fluent Bit multi-architecture debug container image" \
     org.opencontainers.image.version="${RELEASE_VERSION}-debug" \
     org.opencontainers.image.source="https://github.com/fluent/fluent-bit" \
     org.opencontainers.image.documentation="https://docs.fluentbit.io/" \
-    org.opencontainers.image.authors="Eduardo Silva <eduardo@calyptia.com>"
+    org.opencontainers.image.authors="Eduardo Silva <eduardo.silva@chronosphere.io>"
 
 COPY --from=qemu-arm32 /usr/bin/qemu-arm-static /usr/bin/
 COPY --from=qemu-arm64 /usr/bin/qemu-aarch64-static /usr/bin/
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
 # hadolint ignore=DL3008
 RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/sources.list && \
@@ -245,13 +236,7 @@ RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/
 RUN rm -f /usr/bin/qemu-*-static
 COPY --from=builder /fluent-bit /fluent-bit
 
-## Giant Swarm Custom: Copy AWS plugins to support more features
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/kinesis.so /fluent-bit/kinesis.so
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/firehose.so /fluent-bit/firehose.so
-COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/cloudwatch.so /fluent-bit/cloudwatch.so
-
 EXPOSE 2020
 
-# Entry point
-ENTRYPOINT [ "/fluent-bit/bin/fluent-bit" ]
-CMD ["/fluent-bit/bin/fluent-bit", "-e", "/fluent-bit/firehose.so", "-e", "/fluent-bit/cloudwatch.so", "-e", "/fluent-bit/kinesis.so", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+# No entry point so we can just shell in
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
