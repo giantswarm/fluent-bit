@@ -60,7 +60,10 @@ RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/
 
 # Must be run from root of repo
 WORKDIR /src/fluent-bit/
-COPY . ./
+# Giant Swarm Custom: Clone the upstream repo
+ARG RELEASE_VERSION
+RUN git config --global http.version HTTP/1.1
+RUN git clone https://github.com/fluent/fluent-bit.git --branch v"${RELEASE_VERSION}" --single-branch /src/fluent-bit
 
 # We split the builder setup out so people can target it or use as a base image without doing a full build.
 FROM builder-base AS builder
@@ -71,7 +74,8 @@ RUN cmake -DFLB_RELEASE=On \
     -DFLB_SHARED_LIB=Off \
     -DFLB_EXAMPLES=Off \
     -DFLB_HTTP_SERVER=On \
-    -DFLB_IN_EXEC=Off \
+    # Giant Swarm Custom: Enabled so we can use the exec plugin
+    -DFLB_IN_EXEC=On \
     -DFLB_IN_SYSTEMD=On \
     -DFLB_OUT_KAFKA=On \
     -DFLB_OUT_PGSQL=On \
@@ -84,15 +88,15 @@ RUN make -j "$(getconf _NPROCESSORS_ONLN)"
 RUN install bin/fluent-bit /fluent-bit/bin/
 
 # Configuration files
-COPY conf/fluent-bit.conf \
-    conf/parsers.conf \
-    conf/parsers_ambassador.conf \
-    conf/parsers_java.conf \
-    conf/parsers_extra.conf \
-    conf/parsers_openstack.conf \
-    conf/parsers_cinder.conf \
-    conf/plugins.conf \
-    /fluent-bit/etc/
+# Giant Swarm Custom: Replace Docker COPY with cp as we use git clone
+RUN cp /src/fluent-bit/conf/fluent-bit.conf /fluent-bit/etc/
+RUN cp /src/fluent-bit/conf/parsers.conf /fluent-bit/etc/
+RUN cp /src/fluent-bit/conf/parsers_ambassador.conf /fluent-bit/etc/
+RUN cp /src/fluent-bit/conf/parsers_java.conf /fluent-bit/etc/
+RUN cp /src/fluent-bit/conf/parsers_extra.conf /fluent-bit/etc/
+RUN cp /src/fluent-bit/conf/parsers_openstack.conf /fluent-bit/etc/
+RUN cp /src/fluent-bit/conf/parsers_cinder.conf /fluent-bit/etc/
+RUN cp /src/fluent-bit/conf/plugins.conf /fluent-bit/etc/
 
 # Generate schema and include as part of the container image
 RUN /fluent-bit/bin/fluent-bit -J > /fluent-bit/etc/schema.json
@@ -110,6 +114,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get download \
+    # Giant Swarm Custom: Added this plugin so we can support auditd logs
+    auditd \
     libssl3 \
     libsasl2-2 \
     pkg-config \
@@ -181,11 +187,16 @@ COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 # Finally the binaries as most likely to change
 COPY --from=builder /fluent-bit /fluent-bit
 
+## Giant Swarm Custom: Copy AWS plugins to support more features
+COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/kinesis.so /fluent-bit/kinesis.so
+COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/firehose.so /fluent-bit/firehose.so
+COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/cloudwatch.so /fluent-bit/cloudwatch.so
+
 EXPOSE 2020
 
 # Entry point
 ENTRYPOINT [ "/fluent-bit/bin/fluent-bit" ]
-CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+CMD ["/fluent-bit/bin/fluent-bit", "-e", "/fluent-bit/firehose.so", "-e", "/fluent-bit/cloudwatch.so", "-e", "/fluent-bit/kinesis.so", "-c", "/fluent-bit/etc/fluent-bit.conf"]
 
 FROM debian:bookworm-slim AS debug
 ARG RELEASE_VERSION
@@ -236,7 +247,13 @@ RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/
 RUN rm -f /usr/bin/qemu-*-static
 COPY --from=builder /fluent-bit /fluent-bit
 
+## Giant Swarm Custom: Copy AWS plugins to support more features
+COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/kinesis.so /fluent-bit/kinesis.so
+COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/firehose.so /fluent-bit/firehose.so
+COPY --from=amazon/aws-for-fluent-bit:latest /fluent-bit/cloudwatch.so /fluent-bit/cloudwatch.so
+
 EXPOSE 2020
 
-# No entry point so we can just shell in
-CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+# Entry point
+ENTRYPOINT [ "/fluent-bit/bin/fluent-bit" ]
+CMD ["/fluent-bit/bin/fluent-bit", "-e", "/fluent-bit/firehose.so", "-e", "/fluent-bit/cloudwatch.so", "-e", "/fluent-bit/kinesis.so", "-c", "/fluent-bit/etc/fluent-bit.conf"]
